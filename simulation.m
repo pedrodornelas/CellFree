@@ -20,7 +20,7 @@ Ly = 1000 ;   % m
 % Coherence block numbers
 Nbc = 100 ;
 % Total enviroments testeds
-Ncf = 10 ;
+Ncf = 300 ;
 % Pilot symbols power
 Pp = 0.2 ; % W = 200 mW
 % Downlink power
@@ -35,8 +35,8 @@ sigma2 = k_boltzmann * T * bw * noise_figure ; % W
 %% APs and UEs distribution
 
 % Number of APs and UEs
-M = [100] ; % Number of APs
-K = [10, 20, 30] ;  % Number of UEs
+M = [100, 150, 200] ; % Number of APs
+K = [20] ;  % Number of UEs
 
 sinr_stat_k = zeros(max(K), Ncf, Nbc) ; % statistical SINR storage
 sinr_inst_k = zeros(max(K), Ncf, Nbc) ; % instantaneous SINR storage
@@ -202,6 +202,7 @@ grid on
 xlabel('Achievable Rate (Mbits/s)', 'Interpreter', 'Latex')
 ylabel('ECDF', 'Interpreter', 'Latex')
 legend('Location', 'southeast', 'Interpreter', 'Latex', 'FontSize', 10)
+xlim([0 150])
 % title("APs=" + num2str(M(mi)) + ", UEs=" + num2str(K), 'Interpreter', 'Latex')
 ax = gca;
 ax.TickLabelInterpreter = 'latex';
