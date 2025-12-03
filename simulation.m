@@ -20,7 +20,7 @@ Ly = 1000 ;   % m
 % Coherence block numbers
 Nbc = 100 ;
 % Total enviroments testeds
-Ncf = 300 ;
+Ncf = 10 ;
 % Pilot symbols power
 Pp = 0.2 ; % W = 200 mW
 % Downlink power
@@ -35,98 +35,177 @@ sigma2 = k_boltzmann * T * bw * noise_figure ; % W
 %% APs and UEs distribution
 
 % Number of APs and UEs
-M = 100 ; % Number of APs
-K = 20 ;  % Number of UEs
+M = [100] ; % Number of APs
+K = [10, 20, 30] ;  % Number of UEs
 
-% loop of Ncf enviroments
-for n = 1:Ncf
+sinr_stat_k = zeros(max(K), Ncf, Nbc) ; % statistical SINR storage
+sinr_inst_k = zeros(max(K), Ncf, Nbc) ; % instantaneous SINR storage
 
-    % Generate random positions for APs
-    % pAP,m = [xAP,m, yAP,m, hAP]^T
-    pAP = zeros(3, M) ;
-    pAP(1, :) = (rand(1, M) - 0.5) * Lx ; % xAP,m ~ U[-Lx/2, Lx/2]
-    pAP(2, :) = (rand(1, M) - 0.5) * Ly ; % yAP,m ~ U[-Ly/2, Ly/2]
-    pAP(3, :) = h_aps ;                    % hAP (constant height)
+sinr_stat_k_aux = zeros(max(K) * Ncf * Nbc, length(M), length(K)) ;
+sinr_inst_k_aux = zeros(max(K) * Ncf * Nbc, length(M), length(K)) ;
 
-    % Generate random positions for UEs
-    % pUE,k = [xUE,k, yUE,k, hUE]^T
-    pUE = zeros(3, K) ;
-    pUE(1, :) = (rand(1, K) - 0.5) * Lx ; % xUE,k ~ U[-Lx/2, Lx/2]
-    pUE(2, :) = (rand(1, K) - 0.5) * Ly ; % yUE,k ~ U[-Ly/2, Ly/2]
-    pUE(3, :) = h_ues ;                    % hUE (constant height)
+for mi = 1:length(M)
+    for ki = 1:length(K)
 
-    % Visualize the distribution of APs and UEs
-    % figure('Name', 'AP and UE Distribution')
-    % scatter(pAP(1, :), pAP(2, :), 100, 'b^', 'filled', 'DisplayName', 'APs')
-    % hold on
-    % scatter(pUE(1, :), pUE(2, :), 80, 'ro', 'filled', 'DisplayName', 'UEs')
-    % grid on
-    % xlabel('x [m]')
-    % ylabel('y [m]')
-    % title(sprintf('Cell-Free System: %d APs and %d UEs', M, K))
-    % legend('Location', 'best')
-    % axis equal
-    % xlim([-Lx/2 Lx/2])
-    % ylim([-Ly/2 Ly/2])
-    % hold off
+        % loop of Ncf enviroments
+        for n = 1:Ncf
+            n
+            % Generate random positions for APs
+            % pAP,m = [xAP,m, yAP,m, hAP]^T
+            pAP = zeros(3, M(mi)) ;
+            pAP(1, :) = (rand(1, M(mi)) - 0.5) * Lx ; % xAP,m ~ U[-Lx/2, Lx/2]
+            pAP(2, :) = (rand(1, M(mi)) - 0.5) * Ly ; % yAP,m ~ U[-Ly/2, Ly/2]
+            pAP(3, :) = h_aps ;                    % hAP (constant height)
 
-    % distance matrix d(m,k)
-    d = zeros(M, K) ;
-    for m = 1:M
-        for k = 1:K
-            % d(m,k) = || pAP,m - pUE,k ||
-            d(m, k) = norm(pAP(:, m) - pUE(:, k));
-        end
+            % Generate random positions for UEs
+            % pUE,k = [xUE,k, yUE,k, hUE]^T
+            pUE = zeros(3, K(ki)) ;
+            pUE(1, :) = (rand(1, K(ki)) - 0.5) * Lx ; % xUE,k ~ U[-Lx/2, Lx/2]
+            pUE(2, :) = (rand(1, K(ki)) - 0.5) * Ly ; % yUE,k ~ U[-Ly/2, Ly/2]
+            pUE(3, :) = h_ues ;                    % hUE (constant height)
+
+            % Visualize the distribution of APs and UEs
+            % figure('Name', 'AP and UE Distribution')
+            % scatter(pAP(1, :), pAP(2, :), 100, 'b^', 'filled', 'DisplayName', 'APs')
+            % hold on
+            % scatter(pUE(1, :), pUE(2, :), 80, 'ro', 'filled', 'DisplayName', 'UEs')
+            % grid on
+            % xlabel('x [m]')
+            % ylabel('y [m]')
+            % title(sprintf('Cell-Free System: %d APs and %d UEs', M(mi), K(ki)))
+            % legend('Location', 'best')
+            % axis equal
+            % xlim([-Lx/2 Lx/2])
+            % ylim([-Ly/2 Ly/2])
+            % hold off
+
+            % distance matrix d(m,k)
+            d = zeros(M(mi), K(ki)) ;
+            for m = 1:M(mi)
+                for k = 1:K(ki)
+                    % d(m,k) = || pAP,m - pUE,k ||
+                    d(m, k) = norm(pAP(:, m) - pUE(:, k));
+                end
+            end
+
+            %% Fading Coefficients Calculation
+            % Large Coefficients
+            omega = zeros(M(mi), K(ki)) ; % Large-scale fading coefficients matrix
+            for m = 1:M(mi)
+                for k = 1:K(ki)
+                    omega(m, k) = large_scale_fading(d(m, k), fc) ;
+                end
+            end
+
+            % loop of Nbc coherence blocks
+            for bc = 1:Nbc
+
+                % Small Scale Fading Coefficients
+                % h(m,k) ~ CN(0,1)
+                h = (randn(M(mi), K(ki)) + 1i * randn(M(mi), K(ki))) / sqrt(2) ;
+                % channel
+                g = h .* sqrt(omega);
+
+                %% Channel Estimation Phase
+                % equivalent noise
+                noise = (randn(M(mi), K(ki)) + 1i * randn(M(mi), K(ki))) / sqrt(2) * sqrt(sigma2) ;
+                % received pilot signal at APs
+                y = sqrt(tau_p * Pp) * g + noise ;
+                % MMSE Channel Estimation
+                cmk = (sqrt(tau_p * Pp) * omega) ./ (tau_p * Pp * omega + sigma2) ;
+                g_hat = cmk .* y ;
+
+                %% Downlink Data Transmission Phase
+                % Total and Uniform Power are considered
+                gamma_mk = ones(M(mi), K(ki)) ;
+                gamma_mk = sqrt(Pd .* tau_p) .* omega .* cmk ;
+                % Power control coefficients
+                eta_m = ones(M(mi), 1) ;
+                for m = 1:M(mi)
+                    eta_m(m) = 1 / sum(gamma_mk(m, :)) ;
+                end
+
+                % Expand to full matrix eta_mk (eta_mk(m,k) = eta_m(m))
+                eta_mk = repmat(eta_m, 1, K(ki)) ;
+
+                % SINR Calculation
+                sinr_stat_k(:, n, bc) = sinr_stat(K(ki), Pd, eta_mk, gamma_mk, omega, sigma2) ;   % statistical SINR
+                sinr_inst_k(:, n, bc) = sinr_inst(K(ki), Pd, eta_mk, g, g_hat, sigma2) ; % instantaneous SINR - with known g_hat
+
+            end % end of Nbc coherence blocks loop
+        end % end of Nfc enviroments loop
+        % serialize SINR results
+        sinr_stat_k_aux(:, ki, mi) = sinr_stat_k(:) ;
+        sinr_inst_k_aux(:, ki, mi) = sinr_inst_k(:) ;
     end
+end
 
-    %% Fading Coefficients Calculation
-    % Large Coefficients
-    omega = zeros(M, K) ; % Large-scale fading coefficients matrix
-    for m = 1:M
-        for k = 1:K
-            omega(m, k) = large_scale_fading(d(m, k), fc) ;
-        end
+% serialize SINR results
+% sinr_stat_k = sinr_stat_k(:) ;
+% sinr_inst_k = sinr_inst_k(:) ;
+
+% Rate analysis
+rate_stat_k_aux = log2(1 + sinr_stat_k_aux) .* bw ./ 1e6; % rate in Mbits/s
+rate_inst_k_aux = log2(1 + sinr_inst_k_aux) .* bw ./ 1e6;
+
+
+%% Plots
+% Empirical CDF of SINR
+figure('Name', 'ECDF of SINR')
+color = ["b", "r", "g", "k", "m", "c", "y"] ;
+
+cont = 1 ;
+for mi = 1:length(M)
+    for ki = 1:length(K)
+        sinr_stat_k = sinr_stat_k_aux(:, ki, mi) ;
+        sinr_inst_k = sinr_inst_k_aux(:, ki, mi) ;
+        % Statistical SINR CDF
+        [f_stat, x_stat] = ecdf(sinr_stat_k) ;
+        plot(10.*log10(x_stat), f_stat, color(cont) + "--", 'Linewidth', 1.5, 'DisplayName', "ECSI - $K=" + num2str(K(ki)) + ", M=" + num2str(M(mi)) + "$")
+        hold on
+        % Instantaneous SINR CDF
+        [f_inst, x_inst] = ecdf(sinr_inst_k) ;
+        plot(10.*log10(x_inst), f_inst, color(cont) + "-", 'Linewidth', 1.5, 'DisplayName', "PCSI - $K=" + num2str(K(ki)) + ", M=" + num2str(M(mi)) + "$")
+        hold on
+        cont = cont + 1 ;
     end
+end
+grid on
+xlabel('SINR (dB)', 'Interpreter', 'Latex')
+ylabel('ECDF', 'Interpreter', 'Latex')
+legend('Location', 'southeast', 'Interpreter', 'Latex', 'FontSize', 10)
+xlim([-10 30])
+% title("APs=" + num2str(M(mi)) + ", UEs=" + num2str(K), 'Interpreter', 'Latex')
+ax = gca;
+ax.TickLabelInterpreter = 'latex';
+ax.FontSize = 14;
 
-    % loop of Nbc coherence blocks
-    for bc = 1:Nbc
-
-        % Small Scale Fading Coefficients
-        % h(m,k) ~ CN(0,1)
-        h = (randn(M, K) + 1i * randn(M, K)) / sqrt(2) ;
-        % channel
-        g = h .* sqrt(omega);
-
-        %% Channel Estimation Phase
-        % equivalent noise
-        noise = (randn(M, K) + 1i * randn(M, K)) / sqrt(2) * sqrt(sigma2) ;
-        % received pilot signal at APs
-        y = sqrt(tau_p * Pp) * g + noise ;
-        % MMSE Channel Estimation
-        cmk = (sqrt(tau_p * Pp) * omega) ./ (tau_p * Pp * omega + sigma2) ;
-        g_hat = cmk .* y ;
-
-        %% Downlink Data Transmission Phase
-        % Total and Uniform Power are considered
-        gamma_mk = ones(M, K) ;
-        gamma_mk = sqrt(Pd .* tau_p) .* omega .* cmk ;
-        % Power control coefficients
-        eta_m = ones(M, 1) ;
-        for m = 1:M
-            eta_m(m) = 1 / sum(gamma_mk(m, :)) ;
-        end
-
-        % Expand to full matrix eta_mk (eta_mk(m,k) = eta_m(m))
-        eta_mk = repmat(eta_m, 1, K) ;
-
-        % SINR Calculation
-        sinr_k_stat = sinr_stat(K, Pd, eta_mk, gamma_mk, omega, sigma2) ; % statistical SINR
-        sinr_k_inst = sinr_inst(K, Pd, eta_mk, g, g_hat, sigma2) ; % instantaneous SINR - with known g_hat
-
-    end % end of Nbc coherence blocks loop
-end % end of Nfc enviroments loop
-
-'end'
+% Achievable Rates
+figure('Name', 'ECDF of Achievable Rates')
+cont = 1 ;
+for mi = 1:length(M)
+    for ki = 1:length(K)
+        rate_stat_k = rate_stat_k_aux(:, ki, mi) ;
+        rate_inst_k = rate_inst_k_aux(:, ki, mi) ;
+        % Statistical Rate CDF
+        [f_rate_stat, x_rate_stat] = ecdf(rate_stat_k) ;
+        plot(x_rate_stat, f_rate_stat, color(cont)+"--", 'Linewidth', 1.5, 'DisplayName', "ECSI - $K=" + num2str(K(ki)) + ", M=" + num2str(M(mi)) + "$")
+        hold on
+        % Instantaneous Rate CDF
+        [f_rate_inst, x_rate_inst] = ecdf(rate_inst_k) ;
+        plot(x_rate_inst, f_rate_inst, color(cont)+"-", 'Linewidth', 1.5, 'DisplayName', "PCSI - $K=" + num2str(K(ki)) + ", M=" + num2str(M(mi)) + "$")
+        hold on
+        cont = cont + 1 ;
+    end
+end
+grid on
+xlabel('Achievable Rate (Mbits/s)', 'Interpreter', 'Latex')
+ylabel('ECDF', 'Interpreter', 'Latex')
+legend('Location', 'southeast', 'Interpreter', 'Latex', 'FontSize', 10)
+% title("APs=" + num2str(M(mi)) + ", UEs=" + num2str(K), 'Interpreter', 'Latex')
+ax = gca;
+ax.TickLabelInterpreter = 'latex';
+ax.FontSize = 14;
 
 
 % Achievable spectral efficiencies (bits/s/Hz)
